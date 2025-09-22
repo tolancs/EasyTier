@@ -97,75 +97,75 @@ impl WireGuardImpl {
         let mut map_key = None;
 
         loop {
-+            let msg = match stream.next().await {
-+                Some(Ok(msg)) => msg,
-+                Some(Err(err)) => {
-+                    tracing::error!(?err, "Failed to receive from wg client");
-+                    break;
-+                }
-+                None => {
-+                    tracing::info!("Wireguard client disconnected");
-+                    break;
-+                }
-+            };
-+
-+            assert_eq!(msg.packet_type(), ZCPacketType::WG);
-+            let inner = msg.inner();
-+            // Try IPv4 first
-+            if let Some(ipv4) = Ipv4Packet::new(&inner) {
-+                if !ip_registered {
-+                    let client_entry = Arc::new(ClientEntry {
-+                        endpoint_addr: endpoint_addr.clone(),
-+                        sink: mpsc_tunnel.get_sink(),
-+                    });
-+                    map_key = Some(IpAddr::V4(ipv4.get_source()));
-+                    // Be careful here: we may overwrite an existing entry if the client IP is reused,
-+                    // which is common when clients are behind NAT.
-+                    wg_peer_ip_table.insert(IpAddr::V4(ipv4.get_source()), client_entry.clone());
-+                    ip_registered = true;
-+                }
-+                tracing::trace!(?ipv4, "Received IPv4 from wg client");
-+                let dst = IpAddr::V4(ipv4.get_destination());
-+                let _ = peer_mgr
-+                    .send_msg_by_ip(ZCPacket::new_with_payload(inner.as_ref()), dst)
-+                    .await;
-+                continue;
-+            }
-+            // Try IPv6
-+            if let Some(ipv6) = Ipv6Packet::new(&inner) {
-+                if !ip_registered {
-+                    let client_entry = Arc::new(ClientEntry {
-+                        endpoint_addr: endpoint_addr.clone(),
-+                        sink: mpsc_tunnel.get_sink(),
-+                    });
-+                    map_key = Some(IpAddr::V6(ipv6.get_source()));
-+                    wg_peer_ip_table.insert(IpAddr::V6(ipv6.get_source()), client_entry.clone());
-+                    ip_registered = true;
-+                }
-+                tracing::trace!(?ipv6, "Received IPv6 from wg client");
-+                let dst = IpAddr::V6(ipv6.get_destination());
-+                let _ = peer_mgr
-+                    .send_msg_by_ip(ZCPacket::new_with_payload(inner.as_ref()), dst)
-+                    .await;
-+                continue;
-+            }
-+            tracing::error!(?inner, "Failed to parse packet as IPv4 or IPv6");
-+            continue;
-+        }
-+
-+        if let Some(map_key) = map_key {
-+            // Remove the client from the wg_peer_ip_table only when its endpoint address is unchanged,
-+            // or we may break clients behind NAT.
-+            match wg_peer_ip_table
-+                .remove_if(&map_key, |_, entry| entry.endpoint_addr == endpoint_addr)
-+            {
-+                Some(_) => tracing::info!(?map_key, "Removed wg client from table"),
-+                None => tracing::info!(
-+                    ?map_key,
-+                    "The wg client changed its endpoint address, not removing from table"
-+                ),
-+            }
-+        }
+            let msg = match stream.next().await {
+                Some(Ok(msg)) => msg,
+                Some(Err(err)) => {
+                    tracing::error!(?err, "Failed to receive from wg client");
+                    break;
+                }
+                None => {
+                    tracing::info!("Wireguard client disconnected");
+                    break;
+                }
+            };
+
+            assert_eq!(msg.packet_type(), ZCPacketType::WG);
+            let inner = msg.inner();
+            // Try IPv4 first
+            if let Some(ipv4) = Ipv4Packet::new(&inner) {
+                if !ip_registered {
+                    let client_entry = Arc::new(ClientEntry {
+                        endpoint_addr: endpoint_addr.clone(),
+                        sink: mpsc_tunnel.get_sink(),
+                    });
+                    map_key = Some(IpAddr::V4(ipv4.get_source()));
+                    // Be careful here: we may overwrite an existing entry if the client IP is reused,
+                    // which is common when clients are behind NAT.
+                    wg_peer_ip_table.insert(IpAddr::V4(ipv4.get_source()), client_entry.clone());
+                    ip_registered = true;
+                }
+                tracing::trace!(?ipv4, "Received IPv4 from wg client");
+                let dst = IpAddr::V4(ipv4.get_destination());
+                let _ = peer_mgr
+                    .send_msg_by_ip(ZCPacket::new_with_payload(inner.as_ref()), dst)
+                    .await;
+                continue;
+            }
+            // Try IPv6
+            if let Some(ipv6) = Ipv6Packet::new(&inner) {
+                if !ip_registered {
+                    let client_entry = Arc::new(ClientEntry {
+                        endpoint_addr: endpoint_addr.clone(),
+                        sink: mpsc_tunnel.get_sink(),
+                    });
+                    map_key = Some(IpAddr::V6(ipv6.get_source()));
+                    wg_peer_ip_table.insert(IpAddr::V6(ipv6.get_source()), client_entry.clone());
+                    ip_registered = true;
+                }
+                tracing::trace!(?ipv6, "Received IPv6 from wg client");
+                let dst = IpAddr::V6(ipv6.get_destination());
+                let _ = peer_mgr
+                    .send_msg_by_ip(ZCPacket::new_with_payload(inner.as_ref()), dst)
+                    .await;
+                continue;
+            }
+            tracing::error!(?inner, "Failed to parse packet as IPv4 or IPv6");
+            continue;
+        }
+
+        if let Some(map_key) = map_key {
+            // Remove the client from the wg_peer_ip_table only when its endpoint address is unchanged,
+            // or we may break clients behind NAT.
+            match wg_peer_ip_table
+                .remove_if(&map_key, |_, entry| entry.endpoint_addr == endpoint_addr)
+            {
+                Some(_) => tracing::info!(?map_key, "Removed wg client from table"),
+                None => tracing::info!(
+                    ?map_key,
+                    "The wg client changed its endpoint address, not removing from table"
+                ),
+            }
+        }
     }
     async fn start_pipeline_processor(&self) {
         struct PeerPacketFilterForVpnPortal {
@@ -182,45 +182,44 @@ impl WireGuardImpl {
 
                 let payload_bytes = packet.payload();
                 // IPv4 packet handling
-+                if let Some(ipv4) = Ipv4Packet::new(payload_bytes) {
-+                    if ipv4.get_version() != 4 {
-+                        return Some(packet);
-+                    }
-+                    let key = IpAddr::V4(ipv4.get_destination());
-+                    let Some(entry) = self.wg_peer_ip_table.get(&key).map(|f| f.clone()) else {
-+                        return Some(packet);
-+                    };
-+                    tracing::trace!(?ipv4, "Packet filter for vpn portal (IPv4)");
-+                    let payload_offset = packet.packet_type().get_packet_offsets().payload_offset;
-+                    let packet = ZCPacket::new_from_buf(
-+                        packet.inner().split_off(payload_offset),
-+                        ZCPacketType::WG,
-+                    );
-+                    let _ = entry.sink.try_send(packet);
-+                    return None;
-+                }
-+                // IPv6 packet handling
-+                if let Some(ipv6) = Ipv6Packet::new(payload_bytes) {
-+                    if ipv6.get_version() != 6 {
-+                        return Some(packet);
-+                    }
-+                    let key = IpAddr::V6(ipv6.get_destination());
-+                    let Some(entry) = self.wg_peer_ip_table.get(&key).map(|f| f.clone()) else {
-+                        return Some(packet);
-+                    };
-+                    tracing::trace!(?ipv6, "Packet filter for vpn portal (IPv6)");
-+                    let payload_offset = packet.packet_type().get_packet_offsets().payload_offset;
-+                    let packet = ZCPacket::new_from_buf(
-+                        packet.inner().split_off(payload_offset),
-+                        ZCPacketType::WG,
-+                    );
-+                    let _ = entry.sink.try_send(packet);
-+                    return None;
-+                }
-+                // If neither IPv4 nor IPv6
-+                return Some(packet);
-            }
+                if let Some(ipv4) = Ipv4Packet::new(payload_bytes) {
+                    if ipv4.get_version() != 4 {
+                        return Some(packet);
+                    }
+                    let key = IpAddr::V4(ipv4.get_destination());
+                    let Some(entry) = self.wg_peer_ip_table.get(&key).map(|f| f.clone()) else {
+                        return Some(packet);
+                    };
+                    tracing::trace!(?ipv4, "Packet filter for vpn portal (IPv4)");
+                    let payload_offset = packet.packet_type().get_packet_offsets().payload_offset;
+                    let packet = ZCPacket::new_from_buf(
+                        packet.inner().split_off(payload_offset),
+                        ZCPacketType::WG,
+                    );
+                    let _ = entry.sink.try_send(packet);
+                    return None;
+                // IPv6 packet handling
+                if let Some(ipv6) = Ipv6Packet::new(payload_bytes) {
+                    if ipv6.get_version() != 6 {
+                        return Some(packet);
+                    }
+                    let key = IpAddr::V6(ipv6.get_destination());
+                    let Some(entry) = self.wg_peer_ip_table.get(&key).map(|f| f.clone()) else {
+                        return Some(packet);
+                    };
+                    tracing::trace!(?ipv6, "Packet filter for vpn portal (IPv6)");
+                    let payload_offset = packet.packet_type().get_packet_offsets().payload_offset;
+                    let packet = ZCPacket::new_from_buf(
+                        packet.inner().split_off(payload_offset),
+                        ZCPacketType::WG,
+                    );
+                    let _ = entry.sink.try_send(packet);
+                    return None;
+
         }
+        // If neither IPv4 nor IPv6
+        return Some(packet);
+
 
         self.peer_mgr
             .add_packet_process_pipeline(Box::new(PeerPacketFilterForVpnPortal {
