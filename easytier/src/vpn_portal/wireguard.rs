@@ -198,6 +198,7 @@ impl WireGuardImpl {
                     );
                     let _ = entry.sink.try_send(packet);
                     return None;
+            }
                 // IPv6 packet handling
                 if let Some(ipv6) = Ipv6Packet::new(payload_bytes) {
                     if ipv6.get_version() != 6 {
