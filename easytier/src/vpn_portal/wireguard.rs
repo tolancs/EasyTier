@@ -166,7 +166,7 @@ impl WireGuardImpl {
 +                ),
 +            }
 +        }
-
+    }
     async fn start_pipeline_processor(&self) {
         struct PeerPacketFilterForVpnPortal {
             wg_peer_ip_table: WgPeerIpTable,
@@ -290,7 +290,7 @@ impl WireGuardImpl {
         Ok(())
     }
 }
-
+}
 #[derive(Default)]
 pub struct WireGuard {
     inner: Option<WireGuardImpl>,
