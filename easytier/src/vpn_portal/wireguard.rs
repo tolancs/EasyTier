@@ -290,7 +290,7 @@ impl WireGuardImpl {
         Ok(())
     }
 }
-}
+
 #[derive(Default)]
 pub struct WireGuard {
     inner: Option<WireGuardImpl>,
