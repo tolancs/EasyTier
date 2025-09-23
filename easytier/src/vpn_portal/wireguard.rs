@@ -167,6 +167,7 @@ impl WireGuardImpl {
             }
         }
     }
+    
     async fn start_pipeline_processor(&self) {
         struct PeerPacketFilterForVpnPortal {
             wg_peer_ip_table: WgPeerIpTable,
@@ -198,7 +199,7 @@ impl WireGuardImpl {
                     );
                     let _ = entry.sink.try_send(packet);
                     return None;
-            }
+                }
                 // IPv6 packet handling
                 if let Some(ipv6) = Ipv6Packet::new(payload_bytes) {
                     if ipv6.get_version() != 6 {
@@ -216,11 +217,11 @@ impl WireGuardImpl {
                     );
                     let _ = entry.sink.try_send(packet);
                     return None;
-
+                }
+                // If neither IPv4 nor IPv6
+                Some(packet)
+            }
         }
-        // If neither IPv4 nor IPv6
-        return Some(packet);
-
 
         self.peer_mgr
             .add_packet_process_pipeline(Box::new(PeerPacketFilterForVpnPortal {
